@@ -681,3 +681,15 @@ procdump(void)
     printf("\n");
   }
 }
+
+int
+settickets(int tickets)
+{
+  if (tickets < 1 || tickets >= 100)
+    return -1;
+  struct proc *p = myproc();
+  acquire(&p->lock);
+  p->tickets = tickets;
+  release(&p->lock);
+  return 0;
+}
