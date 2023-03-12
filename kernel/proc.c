@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "pstat.h"
 
 struct cpu cpus[NCPU];
 
@@ -250,6 +251,7 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
+  p->tickets = 10;
 
   release(&p->lock);
 }
@@ -295,6 +297,7 @@ fork(void)
     return -1;
   }
   np->sz = p->sz;
+  np->tickets = p->tickets;
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
@@ -446,28 +449,46 @@ scheduler(void)
 {
   struct proc *p;
   struct cpu *c = mycpu();
+  struct proc *runnable_procs[NPROC+1];
+  uint32 ticket_cumsum[NPROC+1];
+  ticket_cumsum[0] = 0;
+  int i;
   
   c->proc = 0;
   for(;;){
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
 
-    for(p = proc; p < &proc[NPROC]; p++) {
+    for(p = proc, i = 1; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
-      if(p->state == RUNNABLE) {
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
-        p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
-
-        // Process is done running for now.
-        // It should have changed its p->state before coming back.
-        c->proc = 0;
+      if (p->state == RUNNABLE) {
+        runnable_procs[i] = p;
+        ticket_cumsum[i] = ticket_cumsum[i-1] + p->tickets;
+        i++;
       }
       release(&p->lock);
     }
+
+    uint32 winner = randint(ticket_cumsum[i-1]) + 1;
+    for (i = 1; i < NPROC+1; i++) {
+      if (winner <= ticket_cumsum[i]) {
+        p = runnable_procs[i];
+        break;
+      }
+    }
+
+    acquire(&p->lock);
+    // Switch to chosen process.  It is the process's job
+    // to release its lock and then reacquire it
+    // before jumping back to us.
+    p->state = RUNNING;
+    c->proc = p;
+    swtch(&c->context, &p->context);
+
+    // Process is done running for now.
+    // It should have changed its p->state before coming back.
+    c->proc = 0;
+    release(&p->lock);
   }
 }
 
@@ -692,4 +713,21 @@ settickets(int tickets)
   p->tickets = tickets;
   release(&p->lock);
   return 0;
+}
+
+int
+getpinfo(uint64 addr)
+{
+  struct pstat st;
+  struct proc *p = myproc();
+  for (int i = 0; i < NPROC; i++) {
+    st.inuse[i] = proc[i].state == UNUSED ? 0 : 1;
+    st.tickets[i] = proc[i].tickets;
+    st.pid[i] = proc[i].pid;
+    st.ticks[i] = 0;
+  }
+  if (copyout(p->pagetable, addr, (char *)&st, sizeof(st)) < 0)
+    return -1;
+  return 0;
+
 }
