@@ -8,6 +8,7 @@ OBJS = \
   $K/printf.o \
   $K/uart.o \
   $K/kalloc.o \
+  $K/lib.o \
   $K/spinlock.o \
   $K/string.o \
   $K/main.o \
@@ -122,9 +123,11 @@ UPROGS=\
 	$U/_grep\
 	$U/_init\
 	$U/_kill\
+	$U/_lottery\
 	$U/_ln\
 	$U/_ls\
 	$U/_mkdir\
+	$U/_pstat\
 	$U/_rm\
 	$U/_sh\
 	$U/_stressfs\

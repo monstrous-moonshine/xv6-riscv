@@ -97,3 +97,11 @@ sys_settickets(void)
   argint(0, &n);
   return settickets(n);
 }
+
+uint64
+sys_getpinfo(void)
+{
+  uint64 addr;
+  argaddr(0, &addr);
+  return getpinfo(addr);
+}
